@@ -1,0 +1,8 @@
+This is test code to get AWS ElasticCache cleint code to correctly access a scaled Memcached cluster.
+
+AutoClient.py tests an auto discovery client based on pymemcache HashClient which uses consistent hashing
+
+ScaleRedis.py really scales Memcached and not Redis. The name is historic.
+Every few minutes a Memcached server is alternatively added or removed from the cluster
+
+The 2 modules should be run from an EC2 insatnce as  2 separate processes to test the system.

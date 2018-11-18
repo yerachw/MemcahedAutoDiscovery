@@ -1,10 +1,7 @@
 import boto3
-import json
-from pymemcache.client.hash import HashClient
-import threading
 import time
 
-client = boto3.client('elasticache')
+client = boto3.client('elasticache', region_name='us-east-1')
 cluster_id = 'scale-test'
 bAddServer = True
 while True:
@@ -23,7 +20,7 @@ while True:
 
     bAddServer = not bAddServer
 
-    time.sleep(180)
+    time.sleep(720)
 
 # response = client.describe_cache_clusters(CacheClusterId='yourcopy-m-staging', ShowCacheNodeInfo=True)
 # print(response)
