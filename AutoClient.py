@@ -44,13 +44,16 @@ class AutodiscoveryClient(HashClient):
         print('Checking cluster')
         new_servers = self.new_server_list()
 
-        for server, port in (set(new_servers) - set(self.servers)):
-            print('Adding server {} on port'.format(server, port))
-            self.add_server(server, port)
+        try:
+            for server, port in (set(new_servers) - set(self.servers)):
+                print('Adding server {} on port'.format(server, port))
+                self.add_server(server, port)
 
-        for server, port in (set(self.servers) - set(new_servers)):
-            print('Removing server {} on port'.format(server, port))
-            self.remove_server(server, port)
+            for server, port in (set(self.servers) - set(new_servers)):
+                print('Removing server {} on port'.format(server, port))
+                self.remove_server(server, port)
+        except Exception as e:
+            print(str(e))
 
         self.servers = new_servers
 
@@ -74,23 +77,34 @@ memcached = AutodiscoveryClient(cluster_id)
 
 
 def setVariable(variable_name, variable_value, expire_secs=0):
-    memcached.set(key=variable_name, value=variable_value, expire=expire_secs)
+    try:
+        memcached.set(key=variable_name, value=variable_value, expire=expire_secs)
+    except Exception as e:
+        print(str(e))
 
 
 def getVariable(variable_name):
-    return memcached.get(variable_name)
+    try:
+        return memcached.get(variable_name)
+    except Exception as e:
+        print(str(e))
+        return None
 
 
 def clearVariable(variable_name):
-    memcached.delete(variable_name)
+    try:
+        memcached.delete(variable_name)
+    except Exception as e:
+        print(str(e))
+
 
 number_to_add = 100
 count = 0
 while True:
     # set number_to_add new variables
     for i in range(count, count + number_to_add):
-        setVariable('foo_{}'.format(i+count), 'HelloWorld')
-        setVariable('foo_json_{}'.format(i+count), {'a': 'b', 'c': 'd'})
+        setVariable('foo_{}'.format(i), 'HelloWorld')
+        setVariable('foo_json_{}'.format(i), {'a': 'b', 'c': 'd'})
 
     time.sleep(10)
 
@@ -98,8 +112,7 @@ while True:
     read = 0
     # make sure we can get all variables back
     for i in range(1, count):
-        getVariable('foo_{}'.format(i+count))
-        getVariable('foo_json_{}'.format(i+count))
-        read = read + 1
-    print('Read {} vars out of {}'.format(read, count))
+        if getVariable('foo_{}'.format(i)) and getVariable('foo_json_{}'.format(i)):
+            read = read + 1
+    print('Read {} vars out of {}'.format(read, count-1))
 

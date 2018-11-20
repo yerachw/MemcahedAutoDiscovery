@@ -1,4 +1,33 @@
 This is test code to get AWS ElasticCache cleint code to correctly access a scaled Memcached cluster.
+Our aim was to write lambda functions in response to an event monitoring one of the memcached metrics, to do the
+auto scaling. As we describe below it is impossible to do the autoscaling from the lambda.
+It needs to be done via the client application as we describe below.
+
+First some facts:
+1. It takes between 3 to 4 minutes to add or remove a memcached node.
+2. According to this doc https://docs.aws.amazon.com/AmazonElastiCache/latest/mem-ug/BestPractices.LoadBalancing.html,
+   we need to use consistent hashing. This is supplied by pymemcache HashClient
+3. AutoDiscovery should be used to check the addition or removal of a node,
+   https://docs.aws.amazon.com/AmazonElastiCache/latest/mem-ug/AutoDiscovery.html
+4. When Removing Nodes from a Cluster the doc https://docs.aws.amazon.com/AmazonElastiCache/latest/mem-ug/Clusters.DeleteNode.html says,
+   "Each time you change the number of nodes in a Memcached cluster, you must re-map at least some of your keyspace so it maps to the correct node."
+   The doc on adding nodes, https://docs.aws.amazon.com/AmazonElastiCache/latest/mem-ug/Clusters.AddNode.html
+   says the same thing, but we did not find this to be necessary. Also not clear how to know which keys to remap. Would seem a waste to remap all.
+   Algorithm for delete node key remapping below.
+
+
+A node is removed in 2 ways:
+1.  Physically dies
+2.  Removed by auto scaling
+
+In the case of a node physically dying there is obviously no way to remap any keys and subsequent gets could cause an exception.
+Also pymemcache itself could remove a dead node almost simultaneously with the AutoDiscovery kicking in
+So one must be careful that this does not cause an exception also.
+AutoDiscovery should remove this node from the client within at most one minute.
+
+If the auto scaling is done by the lambda including key remapping, as described in 4 above, the client will continue
+to assume the key is mapped to
+
 
 AutoClient.py tests an auto discovery client based on pymemcache HashClient which uses consistent hashing
 
