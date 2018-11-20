@@ -1,10 +1,10 @@
 import boto3
 from pymemcache.client.hash import HashClient
-
 import time
 import json
 from threading import Event, Thread
 
+#https://stackoverflow.com/questions/5730276/how-to-export-all-keys-and-values-from-memcached-with-python-memcache
 
 class TimerThread(Thread):
     def __init__(self, function):
@@ -84,20 +84,20 @@ def getVariable(variable_name):
 def clearVariable(variable_name):
     memcached.delete(variable_name)
 
-
+number_to_add = 100
 count = 0
 while True:
-    # set 10 new variables
-    for i in range(1, 11):
+    # set number_to_add new variables
+    for i in range(count, count + number_to_add):
         setVariable('foo_{}'.format(i+count), 'HelloWorld')
         setVariable('foo_json_{}'.format(i+count), {'a': 'b', 'c': 'd'})
 
     time.sleep(10)
 
-    count = count + 10
+    count = count + number_to_add
     read = 0
     # make sure we can get all variables back
-    for i in range(1, count+1):
+    for i in range(1, count):
         getVariable('foo_{}'.format(i+count))
         getVariable('foo_json_{}'.format(i+count))
         read = read + 1
