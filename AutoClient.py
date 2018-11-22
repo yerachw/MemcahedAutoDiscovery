@@ -36,6 +36,7 @@ class AutodiscoveryClient(HashClient):
         for node in nodes:
             if 'Endpoint' in node:  # server may be coming up, no endpoint yet
                 endpoint = (node['Endpoint']['Address'], node['Endpoint']['Port'])
+                print(endpoint)
                 new_servers.append(endpoint)
         return new_servers
 

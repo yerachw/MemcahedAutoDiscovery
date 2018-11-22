@@ -1,2 +1,3 @@
 boto3==1.9.45
 pymemcache==2.0.0
+python-memcached-stats==0.1

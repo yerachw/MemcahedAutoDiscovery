@@ -12,8 +12,8 @@ First some facts:
 4. When Removing Nodes from a Cluster the doc https://docs.aws.amazon.com/AmazonElastiCache/latest/mem-ug/Clusters.DeleteNode.html says,
    "Each time you change the number of nodes in a Memcached cluster, you must re-map at least some of your keyspace so it maps to the correct node."
    The doc on adding nodes, https://docs.aws.amazon.com/AmazonElastiCache/latest/mem-ug/Clusters.AddNode.html
-   says the same thing, but we did not find this to be necessary. Also not clear how to know which keys to remap. Would seem a waste to remap all.
-   Algorithm for delete node key remapping below.
+   says the same thing, so in this case we would need to remap all the keys.
+   Algorithm for adding & deleting node with key remapping is described below.
 
 
 A node is removed in 2 ways:
@@ -26,12 +26,28 @@ So one must be careful that this does not cause an exception also.
 AutoDiscovery should remove this node from the client within at most one minute.
 
 If the auto scaling is done by the lambda including key remapping, as described in 4 above, the client will continue
-to assume the key is mapped to
+to assume the key is mapped to the specific node which may have been deleted in the case of removibg a node.
+Even when a new node is added the mapping changes so the key wont be found.
+So adding and deleting must be an integral part of the AutoDiscovery class.
+
+For removing a node algorithm will work as follows with pymemcache:
+1.  Decide which node is to be removed
+2.  Make a HashClient with just that node
+3.  Use the HashClient to get all the keys on that node.
+4.  Remove the node from the AutoDiscovery class
+5.  For each key found get its value from the to be deleted HashClient and add it to the AutoDiscovery class
+6.  Delete the node from ElasticCache
+
+For adding a node this is the algorithm:
+1.  Add node
+2.  When it comes alive read all keys and values in existing autodiscovery client
+3.  Add the IP of the new node to AutoDiscovery class
+4.  For each key from the list that does not exist, set it. This would essentially remap it
 
 
-AutoClient.py tests an auto discovery client based on pymemcache HashClient which uses consistent hashing
+AutoClient.py tests an auto discovery client based on pymemcache HashClient which apparently uses consistent hashing.
+To add a node touch a file called add.node in the same folder as the running client.
+To remove a node touch del.node
 
-ScaleRedis.py really scales Memcached and not Redis. The name is historic.
-Every few minutes a Memcached server is alternatively added or removed from the cluster
-
-The 2 modules should be run from an EC2 insatnce as  2 separate processes to test the system.
+None of the other files in this project have any relevance.
+They were all fro test purposes.
