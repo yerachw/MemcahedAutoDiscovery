@@ -42,15 +42,17 @@ For adding a node this is the algorithm:
 1.  Add node
 2.  Wait till it comes alive
 3.  Add the IP of the new node to AutoDiscovery class
-4.  For each node IP excluding the new one that was added create a HashClient
+4.  For each node IP, excluding the new one that was added create a HashClient
     For each key from the HashClient that does not exist in the AutoDiscovery class, get its value from the HashClient and remap it
 
 
 AutoClient.py tests an auto discovery client based on pymemcache HashClient which apparently uses consistent hashing.
 To add a node touch a file called add.node in the same folder as the running client.
 To remove a node touch del.node
-Of course a real app will have a lambda taht fires on a metric or 2 and calls a REST API that will do the add/delete node
+Of course a real app will have a lambda that fires on a metric or 2 and calls a REST API that will do the add/delete node
 in the AutoDiscovery client
+You need to have memcached tools installed as memdump is used to list the keys.
+
 
 None of the other files in this project have any relevance.
 They were all for test purposes.
