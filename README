@@ -40,14 +40,17 @@ For removing a node algorithm will work as follows with pymemcache:
 
 For adding a node this is the algorithm:
 1.  Add node
-2.  When it comes alive read all keys and values in existing autodiscovery client
+2.  Wait till it comes alive
 3.  Add the IP of the new node to AutoDiscovery class
-4.  For each key from the list that does not exist, set it. This would essentially remap it
+4.  For each node IP excluding the new one that was added create a HashClient
+    For each key from the HashClient that does not exist in the AutoDiscovery class, get its value from the HashClient and remap it
 
 
 AutoClient.py tests an auto discovery client based on pymemcache HashClient which apparently uses consistent hashing.
 To add a node touch a file called add.node in the same folder as the running client.
 To remove a node touch del.node
+Of course a real app will have a lambda taht fires on a metric or 2 and calls a REST API that will do the add/delete node
+in the AutoDiscovery client
 
 None of the other files in this project have any relevance.
-They were all fro test purposes.
+They were all for test purposes.
