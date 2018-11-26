@@ -124,9 +124,10 @@ memcached = AutodiscoveryClient(cluster_id)
 
 def setVariable(variable_name, variable_value, expire_secs=0):
     try:
-        memcached.set(key=variable_name, value=variable_value, expire=expire_secs)
+        return memcached.set(key=variable_name, value=variable_value, expire=expire_secs)
     except Exception as e:
         print(str(e))
+        return False
 
 
 def getVariable(variable_name):
@@ -146,11 +147,15 @@ def clearVariable(variable_name):
 
 number_to_add = 100
 count = 0
+added = 0
 while True:
     # set number_to_add new variables
     for i in range(count, count + number_to_add):
-        setVariable('foo_{}'.format(i), 'HelloWorld')
-        setVariable('foo_json_{}'.format(i), {'a': 'b', 'c': 'd'})
+        if setVariable('foo_{}'.format(i), 'HelloWorld'):
+            added = added + 1
+        if setVariable('foo_json_{}'.format(i), {'a': 'b', 'c': 'd'}):
+            added = added + 1
+    count = count + number_to_add
 
     time.sleep(10)
 
@@ -161,11 +166,12 @@ while True:
         os.remove('del.node')
         memcached.remove_node()
 
-    count = count + number_to_add
     read = 0
     # make sure we can get all variables back
-    for i in range(1, count):
-        if getVariable('foo_{}'.format(i)) and getVariable('foo_json_{}'.format(i)):
+    for i in range(0, count):
+        if getVariable('foo_{}'.format(i)):
             read = read + 1
-    print('Read {} vars out of {}'.format(read, count-1))
+        if getVariable('foo_json_{}'.format(i)):
+            read = read + 1
+    print('Read {} keys out of {}'.format(read, added))
 
