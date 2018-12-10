@@ -82,14 +82,14 @@ class TimerThread(Thread):
 
 
 
-class AutodiscoveryClient(HashClient):
+class AutodiscoveryClient():
 
     def __init__(self, cluster_id):
         self.elasticache = boto3.client('elasticache', region_name='us-east-1')
         self.cluster_id = cluster_id
         self.servers = self.new_server_list()
         self.internal_scale = False
-        super().__init__(self.servers, serializer=self.json_serializer, deserializer=self.json_deserializer, use_pooling=True)
+        self.hash_client = HashClient(self.servers, serializer=self.json_serializer, deserializer=self.json_deserializer, use_pooling=True)
         thread = TimerThread(self.check_cluster)
         thread.start()
 
@@ -115,45 +115,30 @@ class AutodiscoveryClient(HashClient):
             cur_server_set = set(self.servers)
             servers_changed = False
             if (new_server_set - cur_server_set) or (cur_server_set - new_server_set):
-                print('Found a node difference - dumping keys')
-                self.dump_keys('all_keys.txt')
+                print('Found a node difference')
+                # self.dump_keys('all_keys.txt')
                 servers_changed = True
 
             if (new_server_set - cur_server_set):
                 print('Server added')
                 self.internal_scale = False
-                for server, port in (new_server_set - cur_server_set):
-                    self.add_server(server, port)
-
-                for endpoint in self.servers:
-                    ip, port = endpoint
-                    print('Processing ' + ip)
-                    memcachedStats = MemcachedStats(ip, port)
-                    key_list = memcachedStats.keys()
-                    client = HashClient([endpoint], serializer=self.json_serializer,
-                                        deserializer=self.json_deserializer)
-                    count = 0
-                    for key, expiry in key_list:
-                        if not self.get(key):
-                            val = client.get(key)
-                            if val:
-                                self.set(key, val, expire=expiry)
-                                count = count + 1
-                    print('Found {} keys. Remapped {}'.format(len(key_list), count))
+                self.hash_client = HashClient(new_servers, serializer=self.json_serializer,
+                                                  deserializer=self.json_deserializer, use_pooling=True)
+                self.remap_keys(self.servers)
 
             # server removed not with our code
-            for server, port in (cur_server_set - new_server_set):
+            if (cur_server_set - new_server_set):
                 print('Server removed')
                 if self.internal_scale:
                     self.internal_scale = False
                 else:
-                    print('Removing server {} on port'.format(server, port))
-                    self.remove_server(server, port)
-
+                    print('Removing server')
+                    self.hash_client = HashClient(new_servers, serializer=self.json_serializer,
+                                                  deserializer=self.json_deserializer, use_pooling=True)
 
             if servers_changed:
                 self.servers = new_servers
-                self.dump_keys('all_keys_2.txt')
+ #               self.dump_keys('all_keys_2.txt')
                 self.internal_scale = False
 
         except Exception as e:
@@ -174,18 +159,39 @@ class AutodiscoveryClient(HashClient):
             return json.loads(value.decode('utf-8'))
         raise Exception("Unknown serialization format")
 
-    def dump_keys(self, filename):
-        first = True
-        for endpoint in self.servers:
-            ip, port = endpoint
-            print('Dumping ' + ip)
-            if first:
-                command = 'memdump --servers={}:{} > {}'.format(ip, port, filename)
-                first   = False
-            else:
-                command = 'memdump --servers={}:{} >> {}'.format(ip, port, filename)
-            os.system(command)
 
+    def remap_keys(self, server_list):
+        for endpoint in server_list:
+            startTime = int(time.time())
+            ip, port = endpoint
+            print('Processing ' + ip)
+            memcachedStats = MemcachedStats(ip, port)
+            key_list = memcachedStats.keys()
+            client = HashClient([endpoint], serializer=self.json_serializer,
+                                deserializer=self.json_deserializer)
+            count = 0
+            for key, expiry in key_list:
+                if not self.hash_client.get(key):
+                    val = client.get(key)
+                    if val:
+                        self.hash_client.set(key, val, expire=expiry)
+                        count = count + 1
+            endTime = int(time.time())
+            print('Found {} keys. Remapped {} in {} seconds'.format(len(key_list), count, endTime - startTime))
+
+
+
+    # def dump_keys(self, filename):
+    #     first = True
+    #     for endpoint in self.servers:
+    #         ip, port = endpoint
+    #         print('Dumping ' + ip)
+    #         if first:
+    #             command = 'memdump --servers={}:{} > {}'.format(ip, port, filename)
+    #             first   = False
+    #         else:
+    #             command = 'memdump --servers={}:{} >> {}'.format(ip, port, filename)
+    #         os.system(command)
 
 
     def add_node(self):
@@ -213,31 +219,18 @@ class AutodiscoveryClient(HashClient):
             id_to_remove = node['CacheNodeId']
             endpoint = (node['Endpoint']['Address'], node['Endpoint']['Port'])
             print('Removing node: ' + str(endpoint) + ' with id ' + str(id_to_remove))
-            ip, port = endpoint
 
-            memcachedStats = MemcachedStats(ip, port)
-            key_list = memcachedStats.keys()
-            print('Found {} keys'.format(len(key_list)))
-            client = HashClient([endpoint], serializer=self.json_serializer,
-                                deserializer=self.json_deserializer)
-            key_vals = []
-            for key, expiry in key_list:
-                val = client.get(key)
-                key_vals.append((key, val, expiry))
-            key_list.clear()
-            print('Have vals for {} keys'.format(len(key_vals)))
+            new_servers = self.servers.copy()
+            new_servers.remove(endpoint)
+            print('Remaining servers: ' + str(new_servers))
+            self.hash_client = HashClient(new_servers, serializer=self.json_serializer,
+                                          deserializer=self.json_deserializer, use_pooling=True)
+
+            self.remap_keys(self.servers)
 
             # remove the node
-            self.remove_server(ip, port)
-            print('Server removed from list')
             response = self.elasticache.modify_cache_cluster(CacheClusterId=self.cluster_id, NumCacheNodes=count - 1, CacheNodeIdsToRemove=[id_to_remove], ApplyImmediately=True)
             print(response)
-
-            # put the keys back
-            for key, val, expiry in key_vals:
-                self.set(key, val, expire=expiry)
-
-            print('Remapped {} keys'.format(len(key_vals)))
 
         except Exception as e:
             print(str(e))
@@ -249,7 +242,7 @@ memcached = AutodiscoveryClient(cluster_id)
 
 def setVariable(variable_name, variable_value, expire_secs=0):
     try:
-        return memcached.set(key=variable_name, value=variable_value, expire=expire_secs)
+        return memcached.hash_client.set(key=variable_name, value=variable_value, expire=expire_secs)
     except Exception as e:
         print(str(e))
         return False
@@ -257,7 +250,7 @@ def setVariable(variable_name, variable_value, expire_secs=0):
 
 def getVariable(variable_name):
     try:
-        return memcached.get(variable_name)
+        return memcached.hash_client.get(variable_name)
     except Exception as e:
         print(str(e))
         return None
@@ -265,7 +258,7 @@ def getVariable(variable_name):
 
 def clearVariable(variable_name):
     try:
-        memcached.delete(variable_name)
+        memcached.hash_client.delete(variable_name)
     except Exception as e:
         print(str(e))
 
@@ -275,13 +268,13 @@ count = 0
 added = 0
 while True:
     # set number_to_add new variables
-    if not memcached.internal_scale:
-        for i in range(count, count + number_to_add):
-            if setVariable('foo_{}'.format(i), 'HelloWorld'):
-                added = added + 1
-            if setVariable('foo_json_{}'.format(i), {'a': 'b', 'c': 'd'}):
-                added = added + 1
-        count = count + number_to_add
+#    if not memcached.internal_scale:
+    for i in range(count, count + number_to_add):
+        if setVariable('foo_{}'.format(i), 'HelloWorld'):
+            added = added + 1
+        if setVariable('foo_json_{}'.format(i), {'a': 'b', 'c': 'd'}):
+            added = added + 1
+    count = count + number_to_add
 
     time.sleep(10)
 
@@ -294,11 +287,11 @@ while True:
 
     read = 0
     # make sure we can get all variables back
-    if not memcached.internal_scale:
-        for i in range(0, count):
-            if getVariable('foo_{}'.format(i)):
-                read = read + 1
-            if getVariable('foo_json_{}'.format(i)):
-                read = read + 1
-        print('Read {} keys out of {}'.format(read, added))
+#    if not memcached.internal_scale:
+    for i in range(0, count):
+        if getVariable('foo_{}'.format(i)):
+            read = read + 1
+        if getVariable('foo_json_{}'.format(i)):
+            read = read + 1
+    print('Read {} keys out of {}'.format(read, added))
 
