@@ -1,4 +1,4 @@
-This is test code to get AWS ElasticCache cleint code to correctly access a scaled Memcached cluster.
+This is test code to get AWS ElasticCache client code to correctly access a scaled Memcached cluster.
 Our aim was to write lambda functions in response to an event monitoring one of the memcached metrics, to do the
 auto scaling. As we describe below it is impossible to do the autoscaling from the lambda.
 It needs to be done via the client application as we describe below.
@@ -26,17 +26,16 @@ So one must be careful that this does not cause an exception also.
 AutoDiscovery should remove this node from the client within at most one minute.
 
 If the auto scaling is done by the lambda including key remapping, as described in 4 above, the client will continue
-to assume the key is mapped to the specific node which may have been deleted in the case of removibg a node.
-Even when a new node is added the mapping changes so the key wont be found.
+to assume the key is mapped to the specific node which may have been deleted in the case of removing a node.
+Even when a new node is added the mapping changes so the key won't be found.
 So adding and deleting must be an integral part of the AutoDiscovery class.
 
 For removing a node algorithm will work as follows with pymemcache:
 1.  Decide which node is to be removed
-2.  Make a HashClient with just that node
-3.  Use the HashClient to get all the keys on that node.
-4.  Remove the node from the AutoDiscovery class
-5.  For each key found get its value from the to be deleted HashClient and add it to the AutoDiscovery class
-6.  Delete the node from ElasticCache
+2.  Remove the node from the AutoDiscovery class
+3.  For each node IP, including the  one that is to be deleted, create a HashClient
+    For each key from the HashClient that does not exist in the AutoDiscovery class, get its value from the HashClient and remap it
+4.  Delete the node from ElasticCache
 
 For adding a node this is the algorithm:
 1.  Add node
@@ -51,8 +50,16 @@ To add a node touch a file called add.node in the same folder as the running cli
 To remove a node touch del.node
 Of course a real app will have a lambda that fires on a metric or 2 and calls a REST API that will do the add/delete node
 in the AutoDiscovery client
-You need to have memcached tools installed as memdump is used to list the keys.
-
 
 None of the other files in this project have any relevance.
 They were all for test purposes.
+
+This project used code fom https://github.com/dlrust/python-memcached-stats which was adjusted to suit our needs
+
+LIMITATIONS
+-----------
+The major problem that neither our code nor memdump from memcached tools lists ALL the keys.
+So remapping only works partially. Therefore any app needs a way to rebuild the key/value pair if the keys is not found
+and this should not result in an error condition.
+Also remapping keys is SLOW.
+

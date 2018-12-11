@@ -161,6 +161,7 @@ class AutodiscoveryClient():
 
 
     def remap_keys(self, server_list):
+ #       self.dump_keys(server_list)
         for endpoint in server_list:
             startTime = int(time.time())
             ip, port = endpoint
@@ -174,24 +175,21 @@ class AutodiscoveryClient():
                 if not self.hash_client.get(key):
                     val = client.get(key)
                     if val:
-                        self.hash_client.set(key, val, expire=expiry)
+                        self.hash_client.set(key, val, expire=expiry, noreply=True)
                         count = count + 1
             endTime = int(time.time())
             print('Found {} keys. Remapped {} in {} seconds'.format(len(key_list), count, endTime - startTime))
 
 
 
-    # def dump_keys(self, filename):
-    #     first = True
-    #     for endpoint in self.servers:
-    #         ip, port = endpoint
-    #         print('Dumping ' + ip)
-    #         if first:
-    #             command = 'memdump --servers={}:{} > {}'.format(ip, port, filename)
-    #             first   = False
-    #         else:
-    #             command = 'memdump --servers={}:{} >> {}'.format(ip, port, filename)
-    #         os.system(command)
+    def dump_keys(self, server_list):
+        count = 1
+        for endpoint in server_list:
+            ip, port = endpoint
+            print('Dumping ' + ip)
+            command = 'memdump --servers={}:{} > {}.txt'.format(ip, port, count)
+            count = count + 1
+            os.system(command)
 
 
     def add_node(self):
@@ -270,9 +268,9 @@ while True:
     # set number_to_add new variables
 #    if not memcached.internal_scale:
     for i in range(count, count + number_to_add):
-        if setVariable('foo_{}'.format(i), 'HelloWorld'):
+        if setVariable('foo_{}'.format(i), 'HelloWorld_{}'.format(i), 3600):
             added = added + 1
-        if setVariable('foo_json_{}'.format(i), {'a': 'b', 'c': 'd'}):
+        if setVariable('foo_json_{}'.format(i), {'a': i, 'c': i}, 1800):
             added = added + 1
     count = count + number_to_add
 
